@@ -95,7 +95,7 @@ describe Rack::Attack, type: :request, throttle: true do
     end
   end
 
-  describe "message_throttle" do
+  describe "message_tag_throttle" do
     let(:user) { create(:user) }
     let(:chat_channel) { create(:chat_channel) }
     let(:new_message) do
@@ -121,11 +121,31 @@ describe Rack::Attack, type: :request, throttle: true do
           post messages_path, params: { message: new_message }, headers: headers
         end
         throttled_response = post messages_path, params: { message: new_message }, headers: headers
-        new_api_response = post messages_path, params: { message: new_message }, headers: dif_headers
+        new_response = post messages_path, params: { message: new_message }, headers: dif_headers
 
         valid_responses.each { |r| expect(r).not_to eq(429) }
         expect(throttled_response).to eq(429)
-        expect(new_api_response).not_to eq(429)
+        expect(new_response).not_to eq(429)
+        expect(Honeycomb).to have_received(:add_field).with("fastly_client_ip", "5.6.7.8").exactly(6).times
+        expect(Honeycomb).to have_received(:add_field).with("fastly_client_ip", "1.1.1.1").exactly(2).times
+      end
+    end
+
+    xit "throttles viewing tags" do
+      headers = { "HTTP_FASTLY_CLIENT_IP" => "5.6.7.8" }
+      dif_headers = { "HTTP_FASTLY_CLIENT_IP" => "1.1.1.1" }
+      tag_path = "/t/#{create(:tag).name}"
+
+      Timecop.freeze do
+        valid_responses = Array.new(2).map do
+          get tag_path, headers: headers
+        end
+        throttled_response = get tag_path, headers: headers
+        new_response = get tag_path, headers: dif_headers
+
+        valid_responses.each { |r| expect(r).not_to eq(429) }
+        expect(throttled_response).to eq(429)
+        expect(new_response).not_to eq(429)
         expect(Honeycomb).to have_received(:add_field).with("fastly_client_ip", "5.6.7.8").exactly(6).times
         expect(Honeycomb).to have_received(:add_field).with("fastly_client_ip", "1.1.1.1").exactly(2).times
       end
